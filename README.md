@@ -71,6 +71,8 @@ Later, in `json_runner.py`, the real flow will be: LLM returns text → we parse
 
 `llm_client.py` is the **interface to the LLM**. It sends prompts to Ollama (local models) and returns the model's text response. No API key required.
 
+**Why Ollama instead of OpenAI or Bedrock?** For learning and prototyping, Ollama runs models locally on your machine—no API keys, no usage costs, and no network calls. You can iterate quickly and experiment with prompts and schemas without hitting rate limits or billing. When you're ready for production, the same patterns (prompt → response → validate) apply to cloud providers: swap in OpenAI, Bedrock, or Azure OpenAI by changing the client implementation while keeping `json_runner.py` and `schemas.py` unchanged.
+
 ## Where llm_client.py Fits in the Big Picture
 
 ```
