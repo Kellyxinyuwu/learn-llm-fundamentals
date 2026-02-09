@@ -1,3 +1,42 @@
+# LLM Fundamentals
+
+A small Python project for learning LLM basics before moving into deeper RAG (Retrieval-Augmented Generation) concepts. It explores how to get **reliable, structured outputs** from an LLM using Pydantic schemas, retries on parse failure, and a clean separation of concerns.
+
+## What This Project Does
+
+- **Accepts** a question and context (e.g. financial documents)
+- **Calls** a local LLM via Ollama (no API key, no cost)
+- **Enforces** strict JSON output with a Pydantic schema (answer + citations)
+- **Retries** when the model returns invalid JSON—sends the error back and asks for a fix
+- **Returns** a typed, validated result suitable for downstream use
+
+## What This Project Explores
+
+| Concept | How we use it |
+|---------|----------------|
+| **Pydantic schemas** | Define and validate the shape of LLM output (e.g. `QAResponse` with citations) |
+| **Structured outputs** | Prompt the LLM to return JSON matching our schema; parse and validate |
+| **Retry on failure** | On parse/validation error, feed the error to the model and retry (banking-grade reliability) |
+| **Local LLM (Ollama)** | Learn and prototype without API keys or billing |
+| **Modular design** | `schemas.py` (validation), `llm_client.py` (LLM interface), `json_runner.py` (orchestration) |
+
+## Project Status
+
+This project is **complete** as a fundamentals exercise. It is **not** full RAG yet—there is no retrieval layer (embeddings, vector DB). Context is provided manually. The schema and flow are RAG-ready; adding retrieval is the natural next step.
+
+## Quick Start
+
+```bash
+source venv/bin/activate
+pip install -r requirements.txt
+ollama pull llama3.2    # or another model
+ollama serve            # if not already running
+
+python json_runner.py --demo
+```
+
+---
+
 # schemas.py — Overview
 
 `schema.py` does **not** call the LLM. It only defines the **shape** of the data and validates it.
