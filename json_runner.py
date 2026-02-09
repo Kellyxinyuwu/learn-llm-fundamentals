@@ -70,12 +70,12 @@ def ask_llm_for_json(
 
         if attempt < max_retries - 1:
             current_prompt = f"""{current_prompt}
+            ---
+            Your previous response was invalid:
+            {last_error}
 
----
-Your previous response was invalid:
-{last_error}
-
-Please fix the JSON and return ONLY valid JSON matching the schema. No other text."""
+            Please fix the JSON and return ONLY valid JSON matching the schema. No other text.
+            """
         else:
             raise ValueError(f"Failed after {max_retries} attempts. Last error: {last_error}")
 
