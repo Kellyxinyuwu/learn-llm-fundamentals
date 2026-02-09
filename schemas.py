@@ -40,7 +40,7 @@ class QAResponse(BaseModel):
 
 # answer – required string
 # citations – list of Citation objects
-# default_factory=list – default empty list (don’t use default=[])
+# default_factory=list – default empty list (don't use default=[])
 # List[Citation] – a list of Citation objects
 
 
