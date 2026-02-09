@@ -136,3 +136,113 @@ The `if __name__ == "__main__"` block sends a simple prompt (`"What is the capit
 ```bash
 python llm_client.py
 ```
+
+---
+
+# json_runner.py — Overview
+
+`json_runner.py` is the **orchestrator**. It ties together `llm_client.py` and `schemas.py`: it builds the prompt, calls the LLM, parses the JSON response, validates it against the schema, and retries if parsing or validation fails. This gives you reliable structured outputs suitable for production.
+
+## Where json_runner.py Fits in the Big Picture
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  main()         │ ──▶ │  ask_llm_for_   │ ──▶ │  call_llm()     │ ──▶ │  LLM returns    │
+│  builds prompt  │     │  json()         │     │  (llm_client)   │     │  JSON text      │
+└─────────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘
+         │                        │                        │                        │
+         │                        │                        │                        ▼
+         │                        │                        │               ┌─────────────────┐
+         │                        │                        │               │  _extract_json  │
+         │                        │                        │               │  json.loads     │
+         │                        │                        │               │  model_validate │
+         │                        │                        │               └─────────────────┘
+         │                        │                        │                        │
+         │                        ▼                        │                        ▼
+         │               Retry on failure? ─────────────────┘               QAResponse ✓
+         └──────────────────────────────────────────────────────────────────────────────
+```
+
+`json_runner.py` runs the full loop: prompt → call LLM → parse → validate → retry if needed → return typed result.
+
+---
+
+## What Each Part Does
+
+### Imports and `TypeVar`
+
+- **`json`** — Parse the LLM's raw text into a Python dict.
+- **`re`** — Extract JSON from markdown code blocks (models often wrap output in \`\`\`json ... \`\`\`).
+- **`TypeVar("T", bound=BaseModel)`** — Makes `ask_llm_for_json` generic: it can validate against any Pydantic model (e.g. `QAResponse` or a future schema).
+- **`ValidationError`** — Caught when Pydantic validation fails so we can retry with feedback.
+
+---
+
+### `SYSTEM_INSTRUCTIONS` and `MAX_RETRIES`
+
+- **`SYSTEM_INSTRUCTIONS`** — Tells the LLM its role, the exact JSON schema to return, and the rules (concise answer, at least one citation, no markdown). Clear instructions improve reliability.
+- **`MAX_RETRIES`** — How many times to retry when parsing or validation fails (default 3). Avoids infinite loops when the model keeps returning invalid JSON.
+
+---
+
+### `_extract_json(text)`
+
+**Purpose:** LLMs often wrap JSON in markdown code blocks, which break `json.loads()`. This helper pulls out the JSON string.
+
+**Logic:**
+1. Strip whitespace from the input.
+2. If `\`\`\`json` appears, use regex to extract the content between `\`\`\`json` and `\`\`\``.
+3. If only `\`\`\`` appears (no `json` tag), try extracting content between plain `\`\`\`` blocks.
+4. If neither matches, return the original text (assume it's raw JSON).
+
+**Returns:** A string that should be valid JSON (or close to it).
+
+---
+
+### `ask_llm_for_json(prompt, schema_cls, model, max_retries)`
+
+**Purpose:** The core function. Calls the LLM, parses JSON, validates against the schema, and retries on failure with error feedback.
+
+**Flow:**
+1. **Loop** up to `max_retries` times.
+2. **Call** `call_llm(current_prompt)` to get raw text.
+3. **Extract** JSON with `_extract_json(raw)`.
+4. **Try:** `json.loads()` → `schema_cls.model_validate(data)`.
+5. **Success** → return the validated Pydantic object.
+6. **Failure** → catch `JSONDecodeError` or `ValidationError`, store the error message, and if retries remain, append to the prompt: *"Your previous response was invalid: {error}. Please fix the JSON."* Then loop again.
+7. **Exhausted retries** → raise `ValueError` with the last error.
+
+**Banking-grade idea:** Sending the error back to the model gives it a chance to fix the output. Many failures (trailing commas, extra text) can be corrected on retry.
+
+---
+
+### `main()`
+
+**Purpose:** CLI entry point. Parses arguments, builds the prompt, calls `ask_llm_for_json`, and prints the result.
+
+**Arguments:**
+| Flag | Purpose |
+|------|---------|
+| `--context` | Context documents (for RAG-style Q&A) |
+| `--question` | The question to answer |
+| `--model` | Ollama model name (default: llama3.2) |
+| `--demo` | Use built-in example context and question |
+
+**Logic:**
+1. Parse CLI args with `argparse`.
+2. If `--demo` or no context/question, use hardcoded financial example.
+3. Build prompt: `SYSTEM_INSTRUCTIONS` + context + question + "Return ONLY JSON."
+4. Call `ask_llm_for_json(user_prompt, QAResponse, model=args.model)`.
+5. Print `result.model_dump_json(indent=2)`.
+
+---
+
+## How to run
+
+```bash
+# Demo mode (example context + question)
+python json_runner.py --demo
+
+# Custom context and question
+python json_runner.py --context "Document: ..." --question "What is..."
+```
